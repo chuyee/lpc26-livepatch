@@ -1,0 +1,41 @@
+From 8418e69c13cf7fa28f8090ef765211190a166852 Mon Sep 17 00:00:00 2001
+From: "Zhu, Yi" <chuyee@google.com>
+Date: Thu, 24 Sep 2026 19:18:00 +0000
+Subject: [PATCH] kprobes: Propagate arm_kprobe() error in __register_kprobe()
+
+Commit 587e8e6d640b ("kprobes: Adopt guard() and scoped_guard()")
+replaced the 'goto out; ... return ret;' error path in __register_kprobe()
+with an unconditional 'return 0;', causing __register_kprobe() to silently
+drop the error returned by arm_kprobe().
+
+When arm_kprobe() fails (for example, with -EBUSY when registering a
+kprobe with a post_handler on a function already patched by livepatch,
+due to an FTRACE_OPS_FL_IPMODIFY conflict), the probe is removed from
+kprobe_table, try_to_optimize_kprobe() is called on the unlinked probe,
+and 0 is returned to the caller as though registration succeeded.
+
+This unintentionally reverted commit 12310e343755 ("kprobes: Propagate
+error from arm_kprobe_ftrace()"). Restore the 'return ret;' when
+arm_kprobe() fails.
+
+Fixes: 587e8e6d640b ("kprobes: Adopt guard() and scoped_guard()")
+Signed-off-by: Zhu, Yi <chuyee@google.com>
+---
+ kernel/kprobes.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/kernel/kprobes.c b/kernel/kprobes.c
+index bfc89083daa9..aa731b1c8897 100644
+--- a/kernel/kprobes.c
++++ b/kernel/kprobes.c
+@@ -1697,6 +1697,7 @@ static int __register_kprobe(struct kprobe *p)
+ 		if (ret) {
+ 			hlist_del_rcu(&p->hlist);
+ 			synchronize_rcu();
++			return ret;
+ 		}
+ 	}
+ 
+-- 
+2.56.0.rc1.315.gc6ed9934b7-goog
+

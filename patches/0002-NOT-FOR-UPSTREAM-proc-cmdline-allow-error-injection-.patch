@@ -1,0 +1,48 @@
+From a25e690854ea72b9f69efb371d5fab7da6b1227a Mon Sep 17 00:00:00 2001
+From: "Zhu, Yi" <chuyee@google.com>
+Date: Thu, 24 Sep 2026 19:18:13 +0000
+Subject: [PATCH] NOT FOR UPSTREAM: proc/cmdline: allow error injection on
+ cmdline_proc_show
+
+Mark cmdline_proc_show() with ALLOW_ERROR_INJECTION(..., ERRNO) so that
+the LPC 2026 ftrace coexistence samples (fail_function, bpf_override_return,
+and BPF fmod_ret) can all attach to the same vmlinux target function used
+by the existing livepatch and observability demos.
+
+Signed-off-by: Zhu, Yi <chuyee@google.com>
+---
+ fs/proc/cmdline.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/fs/proc/cmdline.c b/fs/proc/cmdline.c
+index a6f76121955f..d35d9c606d9d 100644
+--- a/fs/proc/cmdline.c
++++ b/fs/proc/cmdline.c
+@@ -1,4 +1,5 @@
+ // SPDX-License-Identifier: GPL-2.0
++#include <linux/error-injection.h>
+ #include <linux/fs.h>
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+@@ -11,6 +12,18 @@ static int cmdline_proc_show(struct seq_file *m, void *v)
+ 	seq_putc(m, '\n');
+ 	return 0;
+ }
++/*
++ * NOT FOR UPSTREAM - LPC 2026 ftrace coexistence samples only.
++ *
++ * samples/lpc26_ftrace/ uses cmdline_proc_show() as the single shared target
++ * for every ftrace consumer class. The Class 1 (Mutator) coexistence tests in
++ * 04_class1_coexistence/ additionally need fail_function, bpf_override_return
++ * and fmod_ret to be able to attach here, and all three gate on
++ * within_error_injection_list(). Whitelisting keeps one common call site for
++ * the whole sample tree instead of scattering the demos across unrelated
++ * functions such as should_failslab() or should_fail_bio().
++ */
++ALLOW_ERROR_INJECTION(cmdline_proc_show, ERRNO);
+ 
+ static int __init proc_cmdline_init(void)
+ {
+-- 
+2.56.0.rc1.315.gc6ed9934b7-goog
+
